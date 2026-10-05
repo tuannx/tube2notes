@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>tube2notes — YouTube lectures → notes, flashcards & quizzes</title>
+<meta name="description" content="Open-source AI study tool on Cloudflare. Turn YouTube lectures and audio into structured study notes, flashcards and quizzes."/>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  .card{transition:transform .4s;transform-style:preserve-3d;cursor:pointer}
+  .flipped{transform:rotateY(180deg)}
+  .face{backface-visibility:hidden}
+  .back{transform:rotateY(180deg)}
+  .tab-active{background:#111827;color:#fff}
+  pre.notes{white-space:pre-wrap}
+</style>
+</head>
+<body class="bg-slate-50 text-slate-900">
+<header class="max-w-6xl mx-auto px-4 py-6 flex items-center justify-between">
+  <div class="font-black text-2xl">tube<span class="text-indigo-600">2</span>notes</div>
+  <a class="text-sm underline" href="https://github.com/tuannx/tube2notes" target="_blank" rel="noreferrer">GitHub · Open Source (MIT)</a>
+</header>
+
+<main class="max-w-6xl mx-auto px-4 pb-20 grid lg:grid-cols-[1fr_320px] gap-8">
+  <section>
+    <h1 class="text-4xl font-black leading-tight">Turn any lecture into study material in minutes.</h1>
+    <p class="mt-3 text-slate-600">Paste a YouTube lecture, drop an audio file, or paste a transcript. Get a summary, structured notes, key concepts, flashcards and a quiz — powered by Cloudflare Workers AI.</p>
+
+    <div class="mt-6 bg-white rounded-2xl shadow p-5">
+      <div class="flex gap-2 mb-4">
+        <button data-mode="youtube" class="mode-btn tab-active px-3 py-2 rounded-lg text-sm border">YouTube URL</button>
+        <button data-mode="text" class="mode-btn px-3 py-2 rounded-lg text-sm border">Paste Text</button>
+        <button data-mode="audio" class="mode-btn px-3 py-2 rounded-lg text-sm border">Upload Audio</button>
+      </div>
+
+      <div id="pane-youtube">
+        <input id="yt-url" class="w-full border rounded-xl px-4 py-3" placeholder="https://www.youtube.com/watch?v=..."/>
+      </div>
+      <div id="pane-text" class="hidden">
+        <input id="text-title" class="w-full border rounded-xl px-4 py-3 mb-2" placeholder="Title (optional)"/>
+        <textarea id="text-body" rows="7" class="w-full border rounded-xl px-4 py-3" placeholder="Paste transcript here (min ~80 chars)..."></textarea>
+      </div>
+      <div id="pane-audio" class="hidden">
+        <input id="audio-file" type="file" accept="audio/*" class="w-full border rounded-xl px-4 py-3"/>
+        <p class="text-xs text-slate-500 mt-1">mp3/wav/m4a — transcribed with Workers AI Whisper.</p>
+      </div>
+
+      <button id="btn-generate" class="mt-4 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl py-3">Generate Study Pack →</button>
+      <p id="status" class="mt-3 text-sm text-slate-600"></p>
+    </div>
+
+    <div id="result" class="hidden mt-6 bg-white rounded-2xl shadow p-5">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h2 id="r-title" class="font-bold text-xl"></h2>
+        <div class="flex gap-2">
+          <button id="btn-share" class="text-sm border rounded-lg px-3 py-1">Copy share link</button>
+          <button id="btn-export" class="text-sm border rounded-lg px-3 py-1">Export .md</button>
+        </div>
+      </div>
+      <div class="flex gap-2 mt-4 flex-wrap">
+        <button data-tab="summary" class="rtab tab-active px-3 py-1 rounded-lg border text-sm">Summary</button>
+        <button data-tab="notes" class="rtab px-3 py-1 rounded-lg border text-sm">Notes</button>
+        <button data-tab="flashcards" class="rtab px-3 py-1 rounded-lg border text-sm">Flashcards</button>
+        <button data-tab="quiz" class="rtab px-3 py-1 rounded-lg border text-sm">Quiz</button>
+        <button data-tab="transcript" class="rtab px-3 py-1 rounded-lg border text-sm">Transcript</button>
+      </div>
+      <div id="tab-summary" class="rtabpane mt-4 leading-relaxed"></div>
+      <div id="tab-notes" class="rtabpane hidden mt-4"><pre class="notes text-sm leading-relaxed"></pre></div>
+      <div id="tab-flashcards" class="rtabpane hidden mt-4">
+        <div id="flash-card" class="card relative bg-indigo-50 border rounded-2xl h-56 flex items-center justify-center p-6 text-center">
+          <div class="face absolute inset-0 flex items-center justify-center p-6"><div><div class="text-xs text-slate-500 mb-2">Click to flip</div><div id="flash-front" class="font-bold text-lg"></div></div></div>
+          <div class="face back absolute inset-0 flex items-center justify-center p-6"><div id="flash-back"></div></div>
+        </div>
+        <div class="flex justify-between mt-3"><button id="flash-prev" class="border rounded-lg px-3 py-1">← Prev</button><span id="flash-count" class="text-sm text-slate-500"></span><button id="flash-next" class="border rounded-lg px-3 py-1">Next →</button></div>
+      </div>
+      <div id="tab-quiz" class="rtabpane hidden mt-4"></div>
+      <div id="tab-transcript" class="rtabpane hidden mt-4"><pre class="notes text-xs text-slate-600 max-h-96 overflow-auto"></pre></div>
+    </div>
+
+    <div class="mt-6 bg-indigo-900 text-white rounded-2xl p-5 flex flex-col sm:flex-row gap-3 items-center justify-between">
+      <div><div class="font-bold">Get study packs in your inbox</div><div class="text-sm text-indigo-200">Join the list — new features, no spam.</div></div>
+      <form id="subscribe" class="flex gap-2 w-full sm:w-auto"><input id="sub-email" type="email" required placeholder="you@example.com" class="rounded-lg px-3 py-2 text-slate-900 flex-1"/><button class="bg-white text-indigo-900 font-bold rounded-lg px-4 py-2">Join</button></form>
+    </div>
+    <p id="sub-msg" class="text-sm mt-2"></p>
+  </section>
+
+  <aside>
+    <div class="bg-white rounded-2xl shadow p-4">
+      <div class="font-bold mb-2">Your lectures</div>
+      <div id="history" class="space-y-2 text-sm text-slate-600">Loading…</div>
+      <div class="border-t mt-4 pt-3 text-xs text-slate-500"><div id="stats"></div></div>
+    </div>
+  </aside>
+</main>
+
+<script>
+const $=s=>document.querySelector(s); let MODE='youtube', current=null, flashcards=[], fi=0, quizScore={answered:0,correct:0};
+document.querySelectorAll('.mode-btn').forEach(b=>b.onclick=()=>{MODE=b.dataset.mode;document.querySelectorAll('.mode-btn').forEach(x=>x.classList.remove('tab-active'));b.classList.add('tab-active');['youtube','text','audio'].forEach(m=>$('#pane-'+m).classList.toggle('hidden',m!==MODE))});
+function setStatus(t){$('#status').textContent=t}
+async function api(path,opts={}){const r=await fetch(path,{headers:{'Content-Type':'application/json'},...opts});const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.detail||j.error||('HTTP '+r.status));return j}
+async function loadHistory(){try{const j=await api('/api/lectures');$('#history').innerHTML=j.lectures.length?j.lectures.map(l=>`<button onclick="openLecture('${l.id}')" class="block w-full text-left border rounded-lg px-3 py-2 hover:bg-slate-50"><div class="font-semibold text-slate-800 line-clamp-1">${escapeHtml(l.title)}</div><div class="text-xs">${l.source_type} · ${new Date(l.created_at).toLocaleString()}</div></button>`).join(''):'No lectures yet.';const s=await api('/api/stats');$('#stats').textContent=`${s.lectures} lectures · ${s.generations} packs · ${s.subscribers} subscribers · funnel: ${s.funnel.dashboard_reach} dashboard / ${s.funnel.generation_complete} generated`}catch(e){$('#history').textContent='Could not load history.'}}
+function escapeHtml(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+window.openLecture=async(id)=>{setStatus('Loading…');try{const j=await api('/api/lectures/'+id);render(j.lecture,j.generation);setStatus('')}catch(e){setStatus(e.message)}}
+function render(lecture,generation){current={lecture,generation};$('#result').classList.remove('hidden');$('#r-title').textContent=lecture.title;$('#tab-summary').textContent=generation?.summary||'Not generated yet.';$('#tab-notes pre').textContent=generation?.notes_md||'';$('#tab-transcript pre').textContent=lecture.transcript||'';flashcards=generation?.flashcards||[];fi=0;renderFlash();renderQuiz(generation?.quiz||[])}
+function renderFlash(){const f=flashcards[fi];$('#flash-front').textContent=f?f.front:'No flashcards';$('#flash-back').textContent=f?f.back:'';$('#flash-count').textContent=flashcards.length?`${fi+1} / ${flashcards.length}`:'';$('#flash-card').classList.remove('flipped')}
+$('#flash-card').onclick=()=>$('#flash-card').classList.toggle('flipped');
+$('#flash-prev').onclick=()=>{fi=(fi-1+flashcards.length)%Math.max(flashcards.length,1);renderFlash()};
+$('#flash-next').onclick=()=>{fi=(fi+1)%Math.max(flashcards.length,1);renderFlash()};
+function renderQuiz(quiz){quizScore={answered:0,correct:0};$('#tab-quiz').innerHTML=quiz.length?quiz.map((q,qi)=>`<div class="border rounded-xl p-4 mb-3"><div class="font-semibold">${qi+1}. ${escapeHtml(q.question)}</div>${q.options.map((o,oi)=>`<button class="block w-full text-left border rounded-lg px-3 py-2 mt-2 hover:bg-slate-50" onclick="answer(this,${qi},${oi},${q.answer_index})">${escapeHtml(o)}</button>`).join('')}<div class="expl hidden text-sm mt-2 text-slate-600">${escapeHtml(q.explanation||'')}</div></div>`).join('')+'<div id="quiz-score" class="font-bold"></div>':'No quiz yet.'}
+window.answer=(btn,qi,oi,correct)=>{const wrap=btn.parentElement;wrap.querySelectorAll('button').forEach(b=>b.disabled=true);const ok=oi===correct;btn.classList.add(ok?'bg-green-100':'bg-red-100');wrap.querySelector('.expl').classList.remove('hidden');quizScore.answered++;if(ok)quizScore.correct++;const total=document.querySelectorAll('#tab-quiz > div').length-1;$('#quiz-score').textContent=`Score: ${quizScore.correct} / ${quizScore.answered}${quizScore.answered===total?' — done! 🎉':''}`}
+document.querySelectorAll('.rtab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.rtab').forEach(x=>x.classList.remove('tab-active'));b.classList.add('tab-active');document.querySelectorAll('.rtabpane').forEach(p=>p.classList.add('hidden'));$('#tab-'+b.dataset.tab).classList.remove('hidden')});
+$('#btn-generate').onclick=async()=>{try{let lectureId,title;setStatus('Step 1/2: fetching transcript…');
+ if(MODE==='youtube'){const j=await api('/api/lectures',{method:'POST',body:JSON.stringify({sourceType:'youtube',url:$('#yt-url').value})});lectureId=j.id;title=j.title}
+ else if(MODE==='text'){const j=await api('/api/lectures',{method:'POST',body:JSON.stringify({sourceType:'text',title:$('#text-title').value,transcript:$('#text-body').value})});lectureId=j.id;title=j.title}
+ else{const fd=new FormData();fd.append('file',$('#audio-file').files[0]);setStatus('Step 1/2: transcribing audio with Whisper…');const r=await fetch('/api/upload',{method:'POST',body:fd});const j=await r.json();if(!r.ok)throw new Error(j.detail||j.error);lectureId=j.id;title=j.title}
+ setStatus('Step 2/2: AI building your study pack (summary, notes, flashcards, quiz)…');
+ const g=await api(`/api/lectures/${lectureId}/generate`,{method:'POST',body:'{}'});
+ const full=await api('/api/lectures/'+lectureId);render(full.lecture,full.generation);setStatus(g.used_fallback?'Done (fallback mode — enable Workers AI for full quality).':'Done! Your study pack is ready.');loadHistory();
+}catch(e){setStatus('Error: '+e.message)}};
+$('#btn-share').onclick=()=>{if(!current)return;navigator.clipboard.writeText(location.origin+'/?id='+current.lecture.id);alert('Share link copied')};
+$('#btn-export').onclick=()=>{if(!current?.generation)return;const g=current.generation;const md=`# ${current.lecture.title}\n\n## Summary\n${g.summary}\n\n${g.notes_md}\n\n## Flashcards\n${(g.flashcards||[]).map(f=>`- Q: ${f.front}\n  A: ${f.back}`).join('\n')}`;const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([md],{type:'text/markdown'}));a.download='study-pack.md';a.click()};
+$('#subscribe').onsubmit=async(e)=>{e.preventDefault();try{await api('/api/subscribe',{method:'POST',body:JSON.stringify({email:$('#sub-email').value})});$('#sub-msg').textContent='You are in. Welcome!';loadHistory()}catch(err){$('#sub-msg').textContent=err.message}};
+const qid=new URLSearchParams(location.search).get('id');loadHistory();if(qid)openLecture(qid);
+</script>
+</body>
+</html>

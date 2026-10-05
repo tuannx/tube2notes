@@ -1,0 +1,30 @@
+name = "tube2notes"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Static frontend
+[assets]
+directory = "./public"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+
+# Workers AI (transcription + LLM study generation)
+[ai]
+binding = "AI"
+
+# D1 — lectures, generations, funnel events, subscribers
+[[d1_databases]]
+binding = "DB"
+database_name = "tube2notes-db"
+database_id = "REPLACE_WITH_YOUR_D1_ID"
+migrations_dir = "migrations"
+
+# R2 — uploaded audio files (optional; app works without it for YouTube/text)
+[[r2_buckets]]
+binding = "AUDIO_BUCKET"
+bucket_name = "tube2notes-audio"
+
+[vars]
+LLM_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+WHISPER_MODEL = "@cf/openai/whisper-large-v3-turbo"
