@@ -1,25 +1,43 @@
 name: Deploy to Cloudflare
-# Manual trigger only: set secrets first (see DEPLOY.md), then run this workflow.
+# Manual trigger only. One-time setup: add repo secrets CLOUDFLARE_API_TOKEN and
+# CLOUDFLARE_ACCOUNT_ID (see DEPLOY.md), then Actions -> this workflow -> Run.
+# The workflow creates the D1 database and R2 bucket if missing, fills in the
+# database_id, applies migrations, and deploys — no wrangler.toml editing needed.
 on:
   workflow_dispatch:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      DB_NAME: tube2notes-db
+      BUCKET_NAME: tube2notes-audio
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
       - run: npm ci
+      - name: Check secrets are set
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::Missing secrets. Add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+      - name: Ensure D1 database exists and fill wrangler.toml
+        run: |
+          DB_ID=$(npx wrangler d1 list --json | jq -r --arg n "$DB_NAME" '.[] | select(.name==$n) | .uuid' | head -1)
+          if [ -z "$DB_ID" ] || [ "$DB_ID" = "null" ]; then
+            npx wrangler d1 create "$DB_NAME"
+            DB_ID=$(npx wrangler d1 list --json | jq -r --arg n "$DB_NAME" '.[] | select(.name==$n) | .uuid' | head -1)
+          fi
+          echo "Using D1 $DB_NAME ($DB_ID)"
+          sed -i "s/REPLACE_WITH_YOUR_D1_ID/$DB_ID/" wrangler.toml
+          grep -A2 'd1_databases' wrangler.toml | head -5
+      - name: Ensure R2 bucket exists
+        run: npx wrangler r2 bucket create "$BUCKET_NAME" || echo "bucket exists, continuing"
       - name: Apply D1 migrations (remote)
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: d1 migrations apply tube2notes-db --remote
+        run: npx wrangler d1 migrations apply "$DB_NAME" --remote
       - name: Deploy Worker
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy
+        run: npx wrangler deploy

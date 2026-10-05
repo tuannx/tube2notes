@@ -7,15 +7,13 @@ OAuth does not work from every environment; an API token is the reliable route.)
 
 1. Cloudflare dashboard → My Profile → API Tokens → Create Token → template
    **"Edit Cloudflare Workers"** (includes Workers Scripts, D1, R2 edit). Copy it once.
-2. Create resources once (dashboard or any logged-in terminal):
-   - D1 database `tube2notes-db` → paste its id into `wrangler.toml` (`REPLACE_WITH_YOUR_D1_ID`), commit
-   - R2 bucket `tube2notes-audio`
-   - Enable Workers AI (dashboard → AI → Workers AI)
+2. Enable Workers AI once (dashboard → AI → Workers AI) for full-quality generation.
 3. In this GitHub repo → Settings → Secrets and variables → Actions, add:
    - `CLOUDFLARE_API_TOKEN` (the token from step 1)
    - `CLOUDFLARE_ACCOUNT_ID` (dashboard → Workers & Pages → right sidebar)
-4. Actions tab → "Deploy to Cloudflare" → Run workflow. It applies D1 migrations
-   remotely, then deploys. Future deploys = re-run the workflow.
+4. Actions tab → "Deploy to Cloudflare" → Run workflow. The workflow creates the
+   D1 database and R2 bucket if missing, fills in the database_id, applies
+   migrations remotely, then deploys. Future deploys = re-run the workflow.
 
 ## Option B — local wrangler (one-time token, transient)
 
